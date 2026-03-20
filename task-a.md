@@ -1,26 +1,26 @@
-# Task A: 既存バグ修正
+# Task A: Existing Bug Fix
 
-## 背景
+## Background
 
-カテゴリ限定クーポンは、注文全体の小計ではなく、**対象商品の小計**が
-`minimumSubtotal` を満たしたときだけ適用されるべきです。
+For category-limited coupons, eligibility should be based on the subtotal of
+the eligible items, not the subtotal of the full order.
 
-## ゴール
+## Goal
 
-checkout の料金計算バグを修正し、対象商品の小計が `minimumSubtotal`
-を満たす場合にだけクーポンが適用されるようにしてください。
+Fix the checkout pricing bug so a coupon is applied only when the eligible
+items subtotal satisfies `minimumSubtotal`.
 
-## 要件
+## Requirements
 
-- バグの原因を特定する
-- 変更は最小限にする
-- カテゴリ限定ではないクーポンの既存挙動は維持する
-- テストを通す
+- identify the root cause
+- keep the change minimal
+- preserve the existing behavior for coupons without category limits
+- make the tests pass
 
-## 想定フロー
+## Expected Flow
 
-- 関連コードを読む
-- テストを実行する
-- バグを修正する
-- 必要ならテストを更新または追加する
-- 最後に変更内容を報告する
+- read the relevant code
+- run the tests
+- fix the bug
+- update or add tests if needed
+- report what changed

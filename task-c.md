@@ -1,30 +1,31 @@
-# Task C: 難問版 Ledger Replay
+# Task C: Hard Ledger Replay
 
-## 背景
+## Background
 
-現在の account-state replay は、単純な append-only event stream しか扱えません。
-実際の運用では、次のような要素が混ざります。
+The current account-state replay logic only supports simple append-only event
+streams. Real workloads now include:
 
-- 重複した idempotency key
+- duplicate idempotency keys
 - out-of-order delivery
-- ペアで届く transfer event
-- 過去イベントへの `correction`
+- paired transfer events
+- retroactive `correction`
 - `reversal`
-- 履歴時点を切る `asOf` query
-- replay 高速化のための optional snapshot
+- historical `asOf` queries
+- optional snapshots for replay acceleration
 
-さらに、ストリーミング用途に向けて incremental update も必要です。
+An incremental update path is also required for streaming systems.
 
-## ゴール
+## Goal
 
-次の2つを実装してください。
+Implement both:
 
 - `rebuildAccountState({ events, snapshots, asOf })`
 - `applyEventsIncrementally(previousState, newEvents)`
 
-同じ effective event stream を表している場合、この2つは等価な結果を返す必要があります。
+Both functions must produce equivalent results when they represent the same
+effective event stream.
 
-## イベント形式
+## Event Shape
 
 ```js
 {
@@ -42,30 +43,33 @@
 }
 ```
 
-## ルール
+## Rules
 
-- Deterministic な sort order:
+- deterministic sort order:
   1. `occurredAt` ascending
   2. `sequence` ascending when both sides have one
-  3. original input order as final tie-break
-- 同じ `idempotencyKey` を持つ event は、sort 後に最初の1件だけ適用し、それ以降は skip する
-- Signed delta は次の通り:
-  - `deposit` は残高を増やす
-  - `withdrawal` と `fee` は残高を減らす
-  - `transfer_debit` は送金元アカウントを減らす
-  - `transfer_credit` は送金先アカウントを増やす
-- `pendingTransfers` には、`asOf` 時点で片側しか存在しない transfer group を含める
-- `correction` は参照先 event の effective amount を過去にさかのぼって変更する
-- `reversal` は参照先 event の current effective delta を反転する
-- unknown target に対する `reversal` は skip する
-- すでに reversed 済みの target に対する `reversal` は skip する
-- unknown target に対する `correction` は skip する
-- すでに reversed 済みの target に対する `correction` は skip する
-- `asOf` より未来の event はすべて無視する
+  3. original input order as the final tie-break
+- if multiple events share the same `idempotencyKey`, only the first sorted one
+  is applied and the rest are skipped
+- signed deltas:
+  - `deposit` increases balance
+  - `withdrawal` and `fee` decrease balance
+  - `transfer_debit` decreases the source account balance
+  - `transfer_credit` increases the destination account balance
+- `pendingTransfers` must include transfer groups where only one half is
+  present by `asOf`
+- `correction` changes the effective amount of the referenced event
+  retroactively
+- `reversal` negates the current effective delta of the referenced event
+- `reversal` of an unknown target must be skipped
+- `reversal` of an already reversed target must be skipped
+- `correction` of an unknown target must be skipped
+- `correction` of an already reversed target must be skipped
+- `asOf` excludes all future events
 
 ## Snapshot
 
-snapshot は任意の入力です。
+Snapshots are optional input objects.
 
 ```js
 {
@@ -74,11 +78,11 @@ snapshot は任意の入力です。
 }
 ```
 
-replay で snapshot を使っても使わなくても構いません。  
-ただし `invalidatedSnapshots` には、後から `correction` または `reversal`
-で意味が変わったイベントより後の snapshot を含めてください。
+You may use snapshots or ignore them for replay. However,
+`invalidatedSnapshots` must include any snapshot that falls after an event later
+modified by `correction` or `reversal`.
 
-## 返り値
+## Return Shape
 
 ```js
 {
@@ -90,11 +94,11 @@ replay で snapshot を使っても使わなくても構いません。
 }
 ```
 
-## Audit ルール
+## Audit Rules
 
-- 対象になった各 event について audit record をちょうど1件返す
-- `action` は `applied` または `skipped`
-- `reason` には理由を入れる:
+- every considered event must produce exactly one audit record
+- `action` is `applied` or `skipped`
+- `reason` must be one of:
   - `applied`
   - `duplicate_idempotency`
   - `transfer_pending`
@@ -103,14 +107,14 @@ replay で snapshot を使っても使わなくても構いません。
   - `unknown_target`
   - `already_reversed`
 
-## Incremental mode
+## Incremental Mode
 
-`applyEventsIncrementally(previousState, newEvents)` は、full effective event stream
-を最初から replay した場合と同じ final state を返す必要があります。
+`applyEventsIncrementally(previousState, newEvents)` must return the same final
+state as replaying the full effective event stream from scratch.
 
-## 要件
+## Requirements
 
-- 既存テストを通す
-- テストを追加または更新する
-- テストスイートを実行する
-- 最後に変更内容と結果を報告する
+- keep existing tests passing
+- add or update tests
+- run the test suite
+- report what changed and the final result

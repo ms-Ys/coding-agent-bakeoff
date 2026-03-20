@@ -1,27 +1,28 @@
 # Task C': Incremental Replay Consistency
 
-## 背景
+## Background
 
-これは `Task C` の派生版です。
+This is a focused variant of Task C.
 
-この課題では snapshot invalidation は扱いません。代わりに、次の点を主題にします。
+This version removes snapshot invalidation and concentrates on:
 
 - deterministic replay
-- 過去イベントへの `correction`
+- retroactive `correction`
 - `reversal`
-- pending transfer の管理
-- full rebuild と incremental replay の完全一致
+- pending transfer tracking
+- exact agreement between full rebuild and incremental replay
 
-## ゴール
+## Goal
 
-次の2つを実装してください。
+Implement both:
 
 - `rebuildAccountState({ events, asOf })`
 - `applyEventsIncrementally(previousState, newEvents)`
 
-同じ effective event stream を表している場合、この2つは同じ public state を返す必要があります。
+Both functions must return the same public state when they represent the same
+effective event stream.
 
-## イベント形式
+## Event Shape
 
 ```js
 {
@@ -39,27 +40,31 @@
 }
 ```
 
-## ルール
+## Rules
 
-- Deterministic な sort order:
+- deterministic sort order:
   1. `occurredAt` ascending
   2. `sequence` ascending when both sides have one
-  3. original input order as final tie-break
-- 同じ `idempotencyKey` を持つ event は、sort 後に最初の1件だけ適用する
-- Signed delta は次の通り:
-  - `deposit` は残高を増やす
-  - `withdrawal` と `fee` は残高を減らす
-  - `transfer_debit` は送金元アカウントを減らす
-  - `transfer_credit` は送金先アカウントを増やす
-- `pendingTransfers` には、`asOf` 時点で片側しか存在しない transfer を含める
-- `correction` は参照先の non-transfer event の effective amount を過去にさかのぼって変更する
-- `reversal` は参照先の non-transfer event の current effective delta を反転する
-- unknown target に対する `correction` / `reversal` は skip する
-- すでに reversed 済みの target に対する `correction` は skip する
-- すでに reversed 済みの target に対する `reversal` は skip する
-- `asOf` より未来の event は無視する
+  3. original input order as the final tie-break
+- if multiple events share the same `idempotencyKey`, only the first sorted one
+  is applied
+- signed deltas:
+  - `deposit` increases balance
+  - `withdrawal` and `fee` decrease balance
+  - `transfer_debit` decreases the source account balance
+  - `transfer_credit` increases the destination account balance
+- `pendingTransfers` must include transfers where only one half is present by
+  `asOf`
+- `correction` changes the effective amount of the referenced non-transfer
+  event retroactively
+- `reversal` negates the current effective delta of the referenced non-transfer
+  event
+- `correction` or `reversal` of an unknown target must be skipped
+- `correction` of an already reversed target must be skipped
+- `reversal` of an already reversed target must be skipped
+- `asOf` excludes all future events
 
-## 返り値
+## Return Shape
 
 ```js
 {
@@ -70,11 +75,11 @@
 }
 ```
 
-## Audit ルール
+## Audit Rules
 
-- 対象 event ごとに audit record をちょうど1件返す
-- `action` は `applied` または `skipped`
-- `reason` は次のいずれか:
+- every considered event must produce exactly one audit record
+- `action` is `applied` or `skipped`
+- `reason` must be one of:
   - `applied`
   - `duplicate_idempotency`
   - `transfer_pending`
@@ -83,14 +88,14 @@
   - `unknown_target`
   - `already_reversed`
 
-## Incremental consistency
+## Incremental Consistency
 
-`applyEventsIncrementally(previousState, newEvents)` は、full effective event stream
-を最初から replay した場合と同じ public state を返す必要があります。
+`applyEventsIncrementally(previousState, newEvents)` must return the same
+public state as replaying the full effective event stream from scratch.
 
-## 要件
+## Requirements
 
-- 既存テストを通す
-- テストを追加または更新する
-- テストスイートを実行する
-- 最後に変更内容と結果を報告する
+- keep existing tests passing
+- add or update tests
+- run the test suite
+- report what changed and the final result
